@@ -9,10 +9,10 @@ import (
 	"time"
 )
 
-// Options 提供了对 HTTP 服务器行为的细粒度控制，包括超时、TLS 配置、
+// Options 提供了对 HTTP 应用行为的细粒度控制，包括超时、TLS 配置、
 // 协议支持等。所有字段都是可选的，未设置的字段将使用 Go 标准库的默认值。
 type Options struct {
-	// Addr 可选地指定服务器监听的 TCP 地址，格式为 "host:port"。
+	// Addr 可选地指定应用监听的 TCP 地址，格式为 "host:port"。
 	// 如果为空，使用 ":http"（端口 80）。
 	// 服务名称在 RFC 6335 中定义并由 IANA 分配。
 	// 地址格式的详细信息请参见 net.Dial。
@@ -91,81 +91,67 @@ type Options struct {
 	Protocols *http.Protocols
 }
 
-// Server HTTP 服务器
-type Server struct {
-	opts  *Options        // 服务器参数
+// App HTTP 应用
+type App struct {
+	opts  *Options        // 应用配置参数
 	mux   Mux             // 路由复用器
-	servs []Servlet       // Servlet 服务组件列表
+	servs []Servlet       // 服务组件列表
 	exit  chan chan error // 优雅关闭通道
 }
 
-// New 创建 HTTP 服务器实例
+// New 创建 HTTP 应用实例
 //
 // 参数:
 //   - mux: 路由复用器
-//   - options: 可选的服务器配置参数（可选）
+//   - options: 可选的应用配置参数（可选）
 //
 // 返回:
-//   - *Server: 服务器实例
+//   - *App: 应用实例
 //
 // 示例:
 //
 //	// 使用默认配置
-//	server := h3.New(mux)
+//	app := h3.New(mux)
 //
 //	// 使用自定义配置
-//	server := h3.New(mux, h3.Options{
+//	app := h3.New(mux, h3.Options{
 //		Addr:         ":8080",
 //		ReadTimeout:  10 * time.Second,
 //		WriteTimeout: 10 * time.Second,
 //	})
-func New(mux Mux, options ...Options) *Server {
+func New(mux Mux, options ...Options) *App {
 	var opts Options
 	if len(options) > 0 {
 		opts = options[0]
 	}
 
-	return &Server{
+	return &App{
 		opts: &opts,
 		mux:  mux,
 		exit: make(chan chan error),
 	}
 }
 
-// NewServer 创建 HTTP 服务器实例（向后兼容）
-//
-// 此函数保留用于向后兼容。推荐使用 New 函数。
-//
-// 参数:
-//   - addr: 监听地址，格式为 "host:port"
-//   - mux: 路由复用器
-//
-// 返回:
-//   - *Server: 服务器实例
-func NewServer(addr string, mux Mux) *Server {
-	return New(mux, Options{Addr: addr})
-}
-
 // Use 添加全局中间件
-func (s *Server) Use(middleware func(http.Handler) http.Handler) {
-	s.mux.Use(middleware)
+func (a *App) Use(middleware func(http.Handler) http.Handler) {
+	a.mux.Use(middleware)
 }
 
-// Register 注册应用组件到服务器
+// Register 注册应用组件
 //
-// 此方法会将应用组件的路由挂载到服务器的主路由器上。
+// 此方法会将应用组件的路由挂载到应用的主路由器上。
 // 如果应用组件实现了 Servlet 接口，还会将其添加到服务组件列表中，
-// 以便在服务器启动和关闭时自动调用其 Start 和 Stop 方法。
+// 以便在应用启动和关闭时自动调用其 Start 和 Stop 方法。
 //
 // 参数:
 //   - c: 要注册的应用组件
-func (s *Server) Register(c Component) {
+func (a *App) Register(c Component) {
 	// 挂载组件路由
-	s.mux.Mount(c.Prefix(), c.Mux())
+	a.mux.Mount(c.Prefix(), c.Mux())
 
 	// 如果组件实现了 Servlet 接口，添加到服务组件列表
 	if serv, ok := c.(Servlet); ok {
-		s.servs = append(s.servs, serv)
+		a.servs = append(a.servs, serv)
 	}
 }
 
@@ -179,8 +165,8 @@ func (s *Server) Register(c Component) {
 // 返回:
 //   - h: 匹配的处理器
 //   - pattern: 匹配的路由模式
-func (s *Server) Handler(r *http.Request) (h http.Handler, pattern string) {
-	return s.mux.Handler(r)
+func (a *App) Handler(r *http.Request) (h http.Handler, pattern string) {
+	return a.mux.Handler(r)
 }
 
 // Handle 注册路由模式和对应的处理器
@@ -190,8 +176,8 @@ func (s *Server) Handler(r *http.Request) (h http.Handler, pattern string) {
 // 参数:
 //   - pattern: 路由模式（例如 "GET /users/{id}"）
 //   - handler: 处理该路由的 http.Handler
-func (s *Server) Handle(pattern string, handler http.Handler) {
-	s.mux.Handle(pattern, handler)
+func (a *App) Handle(pattern string, handler http.Handler) {
+	a.mux.Handle(pattern, handler)
 }
 
 // HandleFunc 注册路由模式和对应的处理函数
@@ -202,23 +188,23 @@ func (s *Server) Handle(pattern string, handler http.Handler) {
 // 参数:
 //   - pattern: 路由模式（例如 "GET /users/{id}"）
 //   - handler: 处理该路由的函数
-func (s *Server) HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) {
-	s.mux.HandleFunc(pattern, handler)
+func (a *App) HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) {
+	a.mux.HandleFunc(pattern, handler)
 }
 
 // ServeHTTP 实现 http.Handler 接口，将请求委托给内部的路由器处理
 //
-// 这使得 Server 本身可以作为一个 http.Handler 使用，
+// 这使得 App 本身可以作为一个 http.Handler 使用，
 // 可以嵌套在其他 HTTP 服务器或中间件中。
 //
 // 参数:
 //   - w: HTTP 响应写入器
 //   - r: HTTP 请求
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.mux.ServeHTTP(w, r)
+func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	a.mux.ServeHTTP(w, r)
 }
 
-// Start 启动 HTTP 服务器(非阻塞)
+// Start 启动 HTTP 应用(非阻塞)
 //
 // 此方法会按顺序执行以下操作:
 //  1. 验证监听地址格式
@@ -233,8 +219,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 //
 // 返回:
 //   - error: 地址无效或 Servlet 启动失败时返回错误
-func (s *Server) Start(ctx context.Context) error {
-	opts := s.opts
+func (a *App) Start(ctx context.Context) error {
+	opts := a.opts
 
 	// 验证监听地址格式
 	if _, _, err := net.SplitHostPort(opts.Addr); err != nil {
@@ -242,11 +228,11 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	// 启动所有 Servlet 组件
-	for i, serv := range s.servs {
+	for i, serv := range a.servs {
 		if err := serv.Start(ctx); err != nil {
 			// 如果启动失败，则逆序停止已启动的 Servlet 组件
 			for j := i - 1; j >= 0; j-- {
-				stopErr := s.servs[j].Stop()
+				stopErr := a.servs[j].Stop()
 				if stopErr != nil {
 					log.Println(stopErr)
 				}
@@ -259,7 +245,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	server := &http.Server{
 		Addr:                         opts.Addr,
-		Handler:                      s.mux,
+		Handler:                      a.mux,
 		DisableGeneralOptionsHandler: opts.DisableGeneralOptionsHandler,
 		TLSConfig:                    opts.TLSConfig,
 		ReadTimeout:                  opts.ReadTimeout,
@@ -278,11 +264,11 @@ func (s *Server) Start(ctx context.Context) error {
 	// 优雅关闭处理
 	go func() {
 		defer cancel()
-		exit := <-s.exit
+		exit := <-a.exit
 
 		// 逆序停止所有 Servlet 组件
-		for i := len(s.servs) - 1; i >= 0; i-- {
-			err := s.servs[i].Stop()
+		for i := len(a.servs) - 1; i >= 0; i-- {
+			err := a.servs[i].Stop()
 			if err != nil {
 				log.Println(err)
 			}
@@ -302,7 +288,7 @@ func (s *Server) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop 优雅停止 HTTP 服务器
+// Stop 优雅停止 HTTP 应用
 //
 // 此方法会按顺序执行以下操作:
 //  1. 发送关闭信号
@@ -314,8 +300,8 @@ func (s *Server) Start(ctx context.Context) error {
 //
 // 返回:
 //   - error: 关闭过程中的错误
-func (s *Server) Stop(ctx context.Context) error {
+func (a *App) Stop(ctx context.Context) error {
 	exit := make(chan error)
-	s.exit <- exit
+	a.exit <- exit
 	return <-exit
 }

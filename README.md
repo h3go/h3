@@ -46,9 +46,9 @@ func main() {
         w.Write([]byte("User ID: " + id))
     })
     
-    // Start server
-    server := h3.NewServer(":8080", mux)
-    server.Start()
+    // Start app
+    app := h3.New(mux, h3.Options{Addr: ":8080"})
+    app.Start()
 }
 ```
 
@@ -87,10 +87,10 @@ adminComponent := h3.NewComponent("/admin")
 adminComponent.Mux().HandleFunc("GET /dashboard", dashboard)
 
 // Register to server
-server := h3.NewServer(":8080", h3.NewMux())
-server.Register(usersComponent)
-server.Register(adminComponent)
-server.Start()
+app := h3.New(h3.NewMux(), h3.Options{Addr: ":8080"})
+app.Register(usersComponent)
+app.Register(adminComponent)
+app.Start()
 ```
 
 ### 3. Response (Response Wrapper)
@@ -145,7 +145,7 @@ func (c *DatabaseComponent) Start(ctx context.Context) error {
 }
 
 func (c *DatabaseComponent) Stop() error {
-    // Disconnect database on server shutdown
+    // Disconnect database on app shutdown
     if c.db != nil {
         return c.db.Close()
     }
@@ -153,10 +153,10 @@ func (c *DatabaseComponent) Stop() error {
 }
 
 // Register component implementing Servlet
-server := h3.NewServer(":8080", h3.NewMux())
-server.Register(dbComponent) // Start is called automatically
+app := h3.New(h3.NewMux(), h3.Options{Addr: ":8080"})
+app.Register(dbComponent) // Start is called automatically
 // ... server running
-server.Stop(ctx)             // Stop is called automatically
+app.Stop(ctx)             // Stop is called automatically
 ```
 
 **Servlet Features**:
@@ -268,13 +268,13 @@ func main() {
         w.Write([]byte("Welcome to H3!"))
     })
     
-    // Create server and register components
-    server := h3.NewServer(":8080", mux)
-    server.Register(NewUsersComponent())
-    server.Register(NewAdminComponent())
+    // Create app and register components
+    app := h3.New(mux, h3.Options{Addr: ":8080"})
+    app.Register(NewUsersComponent())
+    app.Register(NewAdminComponent())
     
-    // Start server
-    server.Start()
+    // Start app
+    app.Start()
 }
 ```
 
@@ -285,10 +285,10 @@ func main() {
     mux := h3.NewMux()
     mux.HandleFunc("GET /", handler)
     
-    server := h3.NewServer(":8080", mux)
+    app := h3.New(mux, h3.Options{Addr: ":8080"})
     
     // Start in goroutine
-    go server.Start()
+    go app.Start()
     
     // Wait for signal
     sigChan := make(chan os.Signal, 1)
@@ -299,7 +299,7 @@ func main() {
     ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
     defer cancel()
     
-    if err := server.Stop(ctx); err != nil {
+    if err := app.Stop(ctx); err != nil {
         log.Printf("Server shutdown error: %v", err)
     }
 }

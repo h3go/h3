@@ -11,29 +11,29 @@ import (
 	"time"
 )
 
-func TestNewServer(t *testing.T) {
+func TestNew(t *testing.T) {
 	mux := NewMux()
-	srv := NewServer(":8080", mux)
+	app := New(mux, Options{Addr: ":8080"})
 
-	if srv == nil {
-		t.Fatal("NewServer returned nil")
+	if app == nil {
+		t.Fatal("New returned nil")
 	}
 
-	if srv.opts.Addr != ":8080" {
-		t.Errorf("addr = %q, want %q", srv.opts.Addr, ":8080")
+	if app.opts.Addr != ":8080" {
+		t.Errorf("addr = %q, want %q", app.opts.Addr, ":8080")
 	}
 
-	if srv.mux == nil {
+	if app.mux == nil {
 		t.Error("mux should not be nil")
 	}
 }
 
-func TestServerUse(t *testing.T) {
+func TestAppUse(t *testing.T) {
 	mux := NewMux()
-	srv := NewServer(":8080", mux)
+	app := New(mux, Options{Addr: ":8080"})
 
 	called := false
-	srv.Use(func(next http.Handler) http.Handler {
+	app.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			called = true
 			next.ServeHTTP(w, r)
@@ -41,16 +41,16 @@ func TestServerUse(t *testing.T) {
 	})
 
 	// Add a handler to test middleware
-	srv.mux.HandleFunc("GET /test", func(w http.ResponseWriter, r *http.Request) {
+	app.mux.HandleFunc("GET /test", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
 	})
 
 	// Verify middleware was added by making a test request
 	ctx := context.Background()
-	if err := srv.Start(ctx); err != nil {
+	if err := app.Start(ctx); err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
-	defer func() { _ = srv.Stop(ctx) }()
+	defer func() { _ = app.Stop(ctx) }()
 
 	// Give server time to start
 	time.Sleep(100 * time.Millisecond)
@@ -66,9 +66,9 @@ func TestServerUse(t *testing.T) {
 	}
 }
 
-func TestServerRegister(t *testing.T) {
+func TestAppRegister(t *testing.T) {
 	mux := NewMux()
-	srv := NewServer(":8081", mux)
+	app := New(mux, Options{Addr: ":8081"})
 
 	// Create a component
 	c := NewComponent("/api")
@@ -77,14 +77,14 @@ func TestServerRegister(t *testing.T) {
 	})
 
 	// Register component
-	srv.Register(c)
+	app.Register(c)
 
 	// Start server
 	ctx := context.Background()
-	if err := srv.Start(ctx); err != nil {
+	if err := app.Start(ctx); err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
-	defer func() { _ = srv.Stop(ctx) }()
+	defer func() { _ = app.Stop(ctx) }()
 
 	// Give server time to start
 	time.Sleep(100 * time.Millisecond)
@@ -105,17 +105,17 @@ func TestServerRegister(t *testing.T) {
 	}
 }
 
-func TestServerStartStop(t *testing.T) {
+func TestAppStartStop(t *testing.T) {
 	mux := NewMux()
 	mux.HandleFunc("GET /test", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("running"))
 	})
 
-	srv := NewServer(":8082", mux)
+	app := New(mux, Options{Addr: ":8082"})
 	ctx := context.Background()
 
 	// Start server
-	if err := srv.Start(ctx); err != nil {
+	if err := app.Start(ctx); err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
 
@@ -134,7 +134,7 @@ func TestServerStartStop(t *testing.T) {
 	}
 
 	// Stop server
-	if err := srv.Stop(ctx); err != nil {
+	if err := app.Stop(ctx); err != nil {
 		t.Fatalf("Stop failed: %v", err)
 	}
 
@@ -148,7 +148,7 @@ func TestServerStartStop(t *testing.T) {
 	}
 }
 
-func TestServerInvalidAddress(t *testing.T) {
+func TestAppInvalidAddress(t *testing.T) {
 	tests := []struct {
 		name string
 		addr string
@@ -160,19 +160,19 @@ func TestServerInvalidAddress(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mux := NewMux()
-			srv := NewServer(tt.addr, mux)
+			app := New(mux, Options{Addr: tt.addr})
 			ctx := context.Background()
 
-			err := srv.Start(ctx)
+			err := app.Start(ctx)
 			if err == nil {
-				_ = srv.Stop(ctx)
+				_ = app.Stop(ctx)
 				t.Error("Start should fail with invalid address")
 			}
 		})
 	}
 }
 
-func TestServerValidAddress(t *testing.T) {
+func TestAppValidAddress(t *testing.T) {
 	tests := []struct {
 		name string
 		addr string
@@ -186,13 +186,13 @@ func TestServerValidAddress(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mux := NewMux()
-			srv := NewServer(tt.addr, mux)
+			app := New(mux, Options{Addr: tt.addr})
 			ctx := context.Background()
 
-			if err := srv.Start(ctx); err != nil {
+			if err := app.Start(ctx); err != nil {
 				t.Fatalf("Start failed: %v", err)
 			}
-			defer func() { _ = srv.Stop(ctx) }()
+			defer func() { _ = app.Stop(ctx) }()
 
 			time.Sleep(100 * time.Millisecond)
 
@@ -207,9 +207,9 @@ func TestServerValidAddress(t *testing.T) {
 	}
 }
 
-func TestServerMultipleComponents(t *testing.T) {
+func TestAppMultipleComponents(t *testing.T) {
 	mux := NewMux()
-	srv := NewServer(":8086", mux)
+	app := New(mux, Options{Addr: ":8086"})
 
 	// Register multiple components
 	apiComponent := NewComponent("/api")
@@ -222,14 +222,14 @@ func TestServerMultipleComponents(t *testing.T) {
 		w.Write([]byte("admin"))
 	})
 
-	srv.Register(apiComponent)
-	srv.Register(adminComponent)
+	app.Register(apiComponent)
+	app.Register(adminComponent)
 
 	ctx := context.Background()
-	if err := srv.Start(ctx); err != nil {
+	if err := app.Start(ctx); err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
-	defer func() { _ = srv.Stop(ctx) }()
+	defer func() { _ = app.Stop(ctx) }()
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -261,7 +261,7 @@ func TestServerMultipleComponents(t *testing.T) {
 	}
 }
 
-func TestServerGracefulShutdown(t *testing.T) {
+func TestAppGracefulShutdown(t *testing.T) {
 	mux := NewMux()
 
 	// Add a slow handler
@@ -270,10 +270,10 @@ func TestServerGracefulShutdown(t *testing.T) {
 		w.Write([]byte("done"))
 	})
 
-	srv := NewServer(":8087", mux)
+	app := New(mux, Options{Addr: ":8087"})
 	ctx := context.Background()
 
-	if err := srv.Start(ctx); err != nil {
+	if err := app.Start(ctx); err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
 
@@ -295,7 +295,7 @@ func TestServerGracefulShutdown(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Stop server (should wait for slow request)
-	if err := srv.Stop(ctx); err != nil {
+	if err := app.Stop(ctx); err != nil {
 		t.Fatalf("Stop failed: %v", err)
 	}
 
@@ -308,7 +308,7 @@ func TestServerGracefulShutdown(t *testing.T) {
 	}
 }
 
-func TestServerContextPropagation(t *testing.T) {
+func TestAppContextPropagation(t *testing.T) {
 	mux := NewMux()
 
 	contextReceived := false
@@ -319,13 +319,13 @@ func TestServerContextPropagation(t *testing.T) {
 		w.Write([]byte("ok"))
 	})
 
-	srv := NewServer(":8088", mux)
+	app := New(mux, Options{Addr: ":8088"})
 	ctx := context.Background()
 
-	if err := srv.Start(ctx); err != nil {
+	if err := app.Start(ctx); err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
-	defer func() { _ = srv.Stop(ctx) }()
+	defer func() { _ = app.Stop(ctx) }()
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -340,12 +340,12 @@ func TestServerContextPropagation(t *testing.T) {
 	}
 }
 
-func TestServerWithMiddlewareAndComponents(t *testing.T) {
+func TestAppWithMiddlewareAndComponents(t *testing.T) {
 	mux := NewMux()
-	srv := NewServer(":8089", mux)
+	app := New(mux, Options{Addr: ":8089"})
 
 	// Add global middleware
-	srv.Use(func(next http.Handler) http.Handler {
+	app.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("X-Global", "true")
 			next.ServeHTTP(w, r)
@@ -365,13 +365,13 @@ func TestServerWithMiddlewareAndComponents(t *testing.T) {
 		w.Write([]byte("ok"))
 	})
 
-	srv.Register(c)
+	app.Register(c)
 
 	ctx := context.Background()
-	if err := srv.Start(ctx); err != nil {
+	if err := app.Start(ctx); err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
-	defer func() { _ = srv.Stop(ctx) }()
+	defer func() { _ = app.Stop(ctx) }()
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -390,17 +390,17 @@ func TestServerWithMiddlewareAndComponents(t *testing.T) {
 	}
 }
 
-func TestServerStartMultipleTimes(t *testing.T) {
+func TestAppStartMultipleTimes(t *testing.T) {
 	mux := NewMux()
 	mux.HandleFunc("GET /test", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
 	})
 
-	srv := NewServer(":8090", mux)
+	app := New(mux, Options{Addr: ":8090"})
 	ctx := context.Background()
 
 	// Start server
-	if err := srv.Start(ctx); err != nil {
+	if err := app.Start(ctx); err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
 
@@ -414,7 +414,7 @@ func TestServerStartMultipleTimes(t *testing.T) {
 	resp.Body.Close()
 
 	// Stop server
-	if err := srv.Stop(ctx); err != nil {
+	if err := app.Stop(ctx); err != nil {
 		t.Fatalf("Stop failed: %v", err)
 	}
 
@@ -469,9 +469,9 @@ func (c *mockServletComponent) wasStopCalled() bool {
 	return c.stopCalled
 }
 
-func TestServerServletLifecycle(t *testing.T) {
+func TestAppServletLifecycle(t *testing.T) {
 	mux := NewMux()
-	srv := NewServer(":8091", mux)
+	app := New(mux, Options{Addr: ":8091"})
 
 	// 创建实现了 Servlet 接口的组件
 	servlet := newMockServletComponent("/servlet")
@@ -479,12 +479,12 @@ func TestServerServletLifecycle(t *testing.T) {
 		w.Write([]byte("ok"))
 	})
 
-	srv.Register(servlet)
+	app.Register(servlet)
 
 	ctx := context.Background()
 
 	// 启动服务器应该调用 Servlet.Start
-	if err := srv.Start(ctx); err != nil {
+	if err := app.Start(ctx); err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
 
@@ -495,7 +495,7 @@ func TestServerServletLifecycle(t *testing.T) {
 	}
 
 	// 停止服务器应该调用 Servlet.Stop
-	if err := srv.Stop(ctx); err != nil {
+	if err := app.Stop(ctx); err != nil {
 		t.Fatalf("Stop failed: %v", err)
 	}
 
@@ -504,22 +504,22 @@ func TestServerServletLifecycle(t *testing.T) {
 	}
 }
 
-func TestServerServletStartError(t *testing.T) {
+func TestAppServletStartError(t *testing.T) {
 	mux := NewMux()
-	srv := NewServer(":8092", mux)
+	app := New(mux, Options{Addr: ":8092"})
 
 	// 创建会在 Start 时返回错误的组件
 	servlet := newMockServletComponent("/servlet")
 	servlet.startError = errors.New("start failed")
 
-	srv.Register(servlet)
+	app.Register(servlet)
 
 	ctx := context.Background()
 
 	// 启动服务器应该失败
-	err := srv.Start(ctx)
+	err := app.Start(ctx)
 	if err == nil {
-		_ = srv.Stop(ctx)
+		_ = app.Stop(ctx)
 		t.Fatal("Start should fail when Servlet.Start returns error")
 	}
 
@@ -528,23 +528,23 @@ func TestServerServletStartError(t *testing.T) {
 	}
 }
 
-func TestServerMultipleServlets(t *testing.T) {
+func TestAppMultipleServlets(t *testing.T) {
 	mux := NewMux()
-	srv := NewServer(":8093", mux)
+	app := New(mux, Options{Addr: ":8093"})
 
 	// 创建多个 Servlet 组件
 	servlet1 := newMockServletComponent("/servlet1")
 	servlet2 := newMockServletComponent("/servlet2")
 	servlet3 := newMockServletComponent("/servlet3")
 
-	srv.Register(servlet1)
-	srv.Register(servlet2)
-	srv.Register(servlet3)
+	app.Register(servlet1)
+	app.Register(servlet2)
+	app.Register(servlet3)
 
 	ctx := context.Background()
 
 	// 启动服务器
-	if err := srv.Start(ctx); err != nil {
+	if err := app.Start(ctx); err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
 
@@ -562,7 +562,7 @@ func TestServerMultipleServlets(t *testing.T) {
 	}
 
 	// 停止服务器
-	if err := srv.Stop(ctx); err != nil {
+	if err := app.Stop(ctx); err != nil {
 		t.Fatalf("Stop failed: %v", err)
 	}
 
@@ -593,9 +593,9 @@ func (s *servletWithOrder) Stop() error {
 	return s.mockServletComponent.Stop()
 }
 
-func TestServerServletStopOrder(t *testing.T) {
+func TestAppServletStopOrder(t *testing.T) {
 	mux := NewMux()
-	srv := NewServer(":8094", mux)
+	app := New(mux, Options{Addr: ":8094"})
 
 	// 记录 Stop 调用顺序
 	var stopOrder []int
@@ -614,19 +614,19 @@ func TestServerServletStopOrder(t *testing.T) {
 	servlet2 := createServlet(2, "/s2")
 	servlet3 := createServlet(3, "/s3")
 
-	srv.Register(servlet1)
-	srv.Register(servlet2)
-	srv.Register(servlet3)
+	app.Register(servlet1)
+	app.Register(servlet2)
+	app.Register(servlet3)
 
 	ctx := context.Background()
 
-	if err := srv.Start(ctx); err != nil {
+	if err := app.Start(ctx); err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
 
 	time.Sleep(100 * time.Millisecond)
 
-	if err := srv.Stop(ctx); err != nil {
+	if err := app.Stop(ctx); err != nil {
 		t.Fatalf("Stop failed: %v", err)
 	}
 
@@ -646,9 +646,9 @@ func TestServerServletStopOrder(t *testing.T) {
 	}
 }
 
-func TestServerMixedComponents(t *testing.T) {
+func TestAppMixedComponents(t *testing.T) {
 	mux := NewMux()
-	srv := NewServer(":8095", mux)
+	app := New(mux, Options{Addr: ":8095"})
 
 	// 注册普通组件（不实现 Servlet）
 	normalComponent := NewComponent("/normal")
@@ -662,12 +662,12 @@ func TestServerMixedComponents(t *testing.T) {
 		w.Write([]byte("servlet"))
 	})
 
-	srv.Register(normalComponent)
-	srv.Register(servlet)
+	app.Register(normalComponent)
+	app.Register(servlet)
 
 	ctx := context.Background()
 
-	if err := srv.Start(ctx); err != nil {
+	if err := app.Start(ctx); err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
 
@@ -699,7 +699,7 @@ func TestServerMixedComponents(t *testing.T) {
 		t.Errorf("servlet component body = %q, want %q", string(body), "servlet")
 	}
 
-	if err := srv.Stop(ctx); err != nil {
+	if err := app.Stop(ctx); err != nil {
 		t.Fatalf("Stop failed: %v", err)
 	}
 
@@ -719,9 +719,9 @@ func (s *servletWithContextCapture) Start(ctx context.Context) error {
 	return s.mockServletComponent.Start(ctx)
 }
 
-func TestServerServletWithContext(t *testing.T) {
+func TestAppServletWithContext(t *testing.T) {
 	mux := NewMux()
-	srv := NewServer(":8096", mux)
+	app := New(mux, Options{Addr: ":8096"})
 
 	var receivedCtx context.Context
 	servlet := &servletWithContextCapture{
@@ -729,12 +729,12 @@ func TestServerServletWithContext(t *testing.T) {
 		receivedCtx:          &receivedCtx,
 	}
 
-	srv.Register(servlet)
+	app.Register(servlet)
 
 	// 创建带值的 context
 	ctx := context.WithValue(context.Background(), "test", "value") //nolint:staticcheck // SA1029: test code
 
-	if err := srv.Start(ctx); err != nil {
+	if err := app.Start(ctx); err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
 
@@ -749,7 +749,7 @@ func TestServerServletWithContext(t *testing.T) {
 		t.Error("Servlet.Start received wrong context")
 	}
 
-	err := srv.Stop(ctx)
+	err := app.Stop(ctx)
 	if err != nil {
 		t.Fatalf("Stop failed: %v", err)
 	}

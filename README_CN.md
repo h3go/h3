@@ -46,9 +46,9 @@ func main() {
         w.Write([]byte("User ID: " + id))
     })
     
-    // 启动服务器
-    server := h3.NewServer(":8080", mux)
-    server.Start()
+    // 启动应用
+    app := h3.New(mux, h3.Options{Addr: ":8080"})
+    app.Start()
 }
 ```
 
@@ -87,10 +87,10 @@ adminComponent := h3.NewComponent("/admin")
 adminComponent.Mux().HandleFunc("GET /dashboard", dashboard)
 
 // 注册到服务器
-server := h3.NewServer(":8080", h3.NewMux())
-server.Register(usersComponent)
-server.Register(adminComponent)
-server.Start()
+app := h3.New(h3.NewMux(), h3.Options{Addr: ":8080"})
+app.Register(usersComponent)
+app.Register(adminComponent)
+app.Start()
 ```
 
 ### 3. Response (响应包装器)
@@ -153,10 +153,10 @@ func (c *DatabaseComponent) Stop() error {
 }
 
 // 注册实现了 Servlet 的组件
-server := h3.NewServer(":8080", h3.NewMux())
-server.Register(dbComponent) // Start 会自动调用
+app := h3.New(h3.NewMux(), h3.Options{Addr: ":8080"})
+app.Register(dbComponent) // Start 会自动调用
 // ... 服务器运行
-server.Stop(ctx)             // Stop 会自动调用
+app.Stop(ctx)             // Stop 会自动调用
 ```
 
 **Servlet 特性**：
@@ -268,13 +268,13 @@ func main() {
         w.Write([]byte("Welcome to H3!"))
     })
     
-    // 创建服务器并注册组件
-    server := h3.NewServer(":8080", mux)
-    server.Register(NewUsersComponent())
-    server.Register(NewAdminComponent())
+    // 创建应用并注册组件
+    app := h3.New(mux, h3.Options{Addr: ":8080"})
+    app.Register(NewUsersComponent())
+    app.Register(NewAdminComponent())
     
-    // 启动服务器
-    server.Start()
+    // 启动应用
+    app.Start()
 }
 ```
 
@@ -285,10 +285,10 @@ func main() {
     mux := h3.NewMux()
     mux.HandleFunc("GET /", handler)
     
-    server := h3.NewServer(":8080", mux)
+    app := h3.New(mux, h3.Options{Addr: ":8080"})
     
     // 在 goroutine 中启动
-    go server.Start()
+    go app.Start()
     
     // 等待信号
     sigChan := make(chan os.Signal, 1)
@@ -299,7 +299,7 @@ func main() {
     ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
     defer cancel()
     
-    if err := server.Stop(ctx); err != nil {
+    if err := app.Stop(ctx); err != nil {
         log.Printf("Server shutdown error: %v", err)
     }
 }
