@@ -403,7 +403,7 @@ func TestMuxResponseWrapping(t *testing.T) {
 
 	mux.HandleFunc("GET /test", func(w http.ResponseWriter, r *http.Request) {
 		// Verify that w is wrapped in Response
-		if _, ok := w.(*Response); !ok {
+		if _, ok := w.(Response); !ok {
 			t.Error("ResponseWriter should be wrapped in Response")
 		}
 		w.Write([]byte("ok"))

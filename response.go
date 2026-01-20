@@ -10,10 +10,11 @@ import (
 )
 
 var (
-	_ http.ResponseWriter = (*Response)(nil)
-	_ http.Flusher        = (*Response)(nil)
-	_ http.Hijacker       = (*Response)(nil)
-	_ http.Pusher         = (*Response)(nil)
+	_ http.ResponseWriter = (*response)(nil)
+	_ http.Flusher        = (*response)(nil)
+	_ http.Hijacker       = (*response)(nil)
+	_ http.Pusher         = (*response)(nil)
+	_ Response            = (*response)(nil)
 )
 
 // Response 扩展了 http.ResponseWriter，添加了状态捕获和连接控制功能
@@ -57,7 +58,40 @@ var (
 //			log.Printf("Status: %d, Size: %d bytes", rw.Status(), rw.Size())
 //		})
 //	}
-type Response struct {
+type Response interface {
+	http.ResponseWriter
+	http.Flusher
+	http.Hijacker
+	http.Pusher
+
+	// Status 返回 HTTP 响应状态码
+	//
+	// 返回值:
+	//   - 如果调用了 WriteHeader，返回传入的状态码
+	//   - 如果调用了 Write 但未调用 WriteHeader，返回 200
+	//   - 如果都未调用，返回初始默认值 200
+	Status() int
+
+	// Size 返回已写入响应体的字节总数
+	Size() int64
+
+	// Committed 返回响应是否已提交
+	//
+	// 响应在以下情况被视为已提交：
+	//   - 调用了 WriteHeader
+	//   - 调用了 Write（会自动调用 WriteHeader）
+	//
+	// 一旦响应提交，就无法再修改状态码。
+	Committed() bool
+
+	// Unwrap 返回原始的 http.ResponseWriter
+	//
+	// ResponseController 可以用来访问原始的 http.ResponseWriter。
+	// 参见 [https://go.dev/blog/go1.20]
+	Unwrap() http.ResponseWriter
+}
+
+type response struct {
 	http.ResponseWriter       // 嵌入原始 ResponseWriter
 	status              int   // 捕获的 HTTP 状态码
 	size                int64 // 已写入的字节数
@@ -68,48 +102,34 @@ type Response struct {
 //
 // 如果传入的 ResponseWriter 已经是 Response 类型，直接返回避免重复包装。
 // 默认状态码设置为 200 OK，这是 HTTP 协议的默认状态。
-func NewResponse(w http.ResponseWriter) *Response {
-	if rw, ok := w.(*Response); ok {
-		return rw
+func NewResponse(w http.ResponseWriter) Response {
+	if r, ok := w.(Response); ok {
+		return r
 	}
 
-	return &Response{
+	return &response{
 		ResponseWriter: w,
 		status:         http.StatusOK,
 	}
 }
 
 // Status 返回 HTTP 响应状态码
-//
-// 返回值:
-//   - 如果调用了 WriteHeader，返回传入的状态码
-//   - 如果调用了 Write 但未调用 WriteHeader，返回 200
-//   - 如果都未调用，返回初始默认值 200
-func (r *Response) Status() int {
+func (r *response) Status() int {
 	return r.status
 }
 
 // Size 返回已写入响应体的字节总数
-func (r *Response) Size() int64 {
+func (r *response) Size() int64 {
 	return r.size
 }
 
 // Committed 返回响应是否已提交
-//
-// 响应在以下情况被视为已提交：
-//   - 调用了 WriteHeader
-//   - 调用了 Write（会自动调用 WriteHeader）
-//
-// 一旦响应提交，就无法再修改状态码。
-func (r *Response) Committed() bool {
+func (r *response) Committed() bool {
 	return r.committed
 }
 
 // Unwrap 返回原始的 http.ResponseWriter
-//
-// ResponseController 可以用来访问原始的 http.ResponseWriter。
-// 参见 [https://go.dev/blog/go1.20]
-func (r *Response) Unwrap() http.ResponseWriter {
+func (r *response) Unwrap() http.ResponseWriter {
 	return r.ResponseWriter
 }
 
@@ -123,7 +143,7 @@ func (r *Response) Unwrap() http.ResponseWriter {
 //   - HTTP 协议规定响应头只能发送一次
 //   - 多次调用 WriteHeader 是编程错误，应该避免
 //   - 标准库的行为是忽略后续调用（但可能记录警告）
-func (r *Response) WriteHeader(code int) {
+func (r *response) WriteHeader(code int) {
 	if r.committed {
 		// 响应已提交，无法修改状态码，只能记录错误
 		log.Printf("attempt to write header after response committed")
@@ -148,7 +168,7 @@ func (r *Response) WriteHeader(code int) {
 // 返回:
 //   - n: 成功写入的字节数
 //   - err: 写入过程中的错误（如果有）
-func (r *Response) Write(p []byte) (size int, err error) {
+func (r *response) Write(p []byte) (size int, err error) {
 	if !r.committed {
 		// 默认状态码为 200 OK（如果处理器不显式调用 WriteHeader）
 		if r.status == 0 {
@@ -167,33 +187,33 @@ func (r *Response) Write(p []byte) (size int, err error) {
 //
 // 此方法用于 WebSocket 连接升级、代理和其他高级用例。
 // 参见 [http.Hijacker](https://golang.org/pkg/net/http/#Hijacker)
-func (rw *Response) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+func (r *response) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	// 新代码应该这样进行响应劫持
 	// http.NewResponseController(responseWriter).Hijack()
 	//
 	// 但是一些旧库不知道 `http.NewResponseController` 的存在，会尝试直接劫持
 	// `hj, ok := resp.(http.Hijacker)` <-- 如果 Response 不直接实现 Hijack 方法就会失败
 	// 所以为此我们需要实现 http.Hijacker 接口
-	return http.NewResponseController(rw.ResponseWriter).Hijack()
+	return http.NewResponseController(r.ResponseWriter).Hijack()
 }
 
 // Flush 实现 http.Flusher 接口，允许 HTTP 处理器将缓冲数据刷新到客户端
 //
 // 参见 [http.Flusher](https://golang.org/pkg/net/http/#Flusher)
-func (rw *Response) Flush() {
-	err := http.NewResponseController(rw.ResponseWriter).Flush()
+func (r *response) Flush() {
+	err := http.NewResponseController(r.ResponseWriter).Flush()
 	if err != nil && errors.Is(err, http.ErrNotSupported) {
-		panic(fmt.Errorf("h3: response writer %T does not support flushing (http.Flusher interface)", rw.ResponseWriter))
+		panic(fmt.Errorf("h3: response writer %T does not support flushing (http.Flusher interface)", r.ResponseWriter))
 	}
 }
 
 // Push 实现 http.Pusher 接口，用于 HTTP/2 服务器推送
 //
 // 参见 [http.Pusher](https://golang.org/pkg/net/http/#Pusher)
-func (rw *Response) Push(target string, opts *http.PushOptions) error {
-	pusher, ok := rw.ResponseWriter.(http.Pusher)
+func (r *response) Push(target string, opts *http.PushOptions) error {
+	pusher, ok := r.ResponseWriter.(http.Pusher)
 	if !ok {
-		return fmt.Errorf("h3: response writer %T does not support pushing (http.Pusher interface)", rw.ResponseWriter)
+		return fmt.Errorf("h3: response writer %T does not support pushing (http.Pusher interface)", r.ResponseWriter)
 	}
 	return pusher.Push(target, opts)
 }
