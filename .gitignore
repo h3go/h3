@@ -1,0 +1,25 @@
+# IDE
+.vscode/
+.idea/
+.zed/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Dependency directories
+vendor/
+
+# Application
+.env
+!.env.example
+
+# Output of the go coverage tool
+*.out
+coverage.html
+
+# Test binary, built with `go test -c`
+*.test
